@@ -17,6 +17,11 @@
 */
 
 
+using System.Net;
+using System.Net.Sockets;
+using Microsoft.Win32;
+using NetOffice;
+using NetOffice.OfficeApi.Enums;
 
 namespace OpenERPOutlookPlugin
 {
@@ -24,9 +29,9 @@ namespace OpenERPOutlookPlugin
     using System.Reflection;
     using System.Runtime.InteropServices;
     using System.Windows.Forms;
-    using office = Microsoft.Office.Core;
-    using outlook = Microsoft.Office.Interop.Outlook;
     using OpenERPClient;
+    using Outlook = NetOffice.OutlookApi;
+    using Office = NetOffice.OfficeApi;
 
 
     
@@ -46,18 +51,21 @@ namespace OpenERPOutlookPlugin
     /// </summary>
     /// <seealso class='IDTExtensibility2' />
 
-    [GuidAttribute("C86B5760-1254-4F40-BD25-2094A2A678C4"), ProgId("OpenERPOutlookPlugin.Connect")]
+    [GuidAttribute("C86B5760-1254-4F40-BD25-2094A2A678C4"), ProgId("OpenERPOutlookPlugin.Connect"), ComVisible(true)]
     public class Connect : Object, Extensibility.IDTExtensibility2
     {
+        private static readonly string _addinOfficeRegistryKey = "Software\\Microsoft\\Office\\Outlook\\AddIns\\";
+        private static readonly string _prodId = "OpenERPOutlookPlugin.Connect";
+        private static readonly string _addinFriendlyName = "OpenERPOplugin";
+        private static readonly string _addinDescription = "OpenERPOplugin used NetOffice";
+        Outlook.Application _outlookApplication ;
+
+
+        #region IDTExtensibility2
         /// <summary>
         ///		Implements the constructor for the Add-in object.
         ///		Place your initialization code within this method.
         /// </summary>
-
-        public Connect()
-        {
-
-        }
 
         public int cnt_mail = 0;
 
@@ -75,15 +83,18 @@ namespace OpenERPOutlookPlugin
         ///      Object representing this Add-in.
         /// </param>
         /// <seealso class='IDTExtensibility2' />
+        [STAThread]
         public void OnConnection(object application, Extensibility.ext_ConnectMode connectMode, object addInInst, ref System.Array custom)
         {
-            applicationObject = application;
-            addInInstance = addInInst;
-
-            if (connectMode != Extensibility.ext_ConnectMode.ext_cm_Startup)
+            try
             {
-                OnStartupComplete(ref custom);
-                
+                _outlookApplication = new Outlook.Application(null, application);
+                NetOffice.OutlookSecurity.Suppress.Enabled = true;
+            }
+            catch (Exception ex)
+            {
+                string message = string.Format("An error occured.{0}{0}{1}", Environment.NewLine, ex.Message);
+                MessageBox.Show(message, "OPENERP-OnConnection", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -100,11 +111,16 @@ namespace OpenERPOutlookPlugin
         /// <seealso class='IDTExtensibility2' />
         public void OnDisconnection(Extensibility.ext_DisconnectMode disconnectMode, ref System.Array custom)
         {
-            if (disconnectMode != Extensibility.ext_DisconnectMode.ext_dm_HostShutdown)
+            try
             {
-                OnBeginShutdown(ref custom);
+                if (null != _outlookApplication)
+                    _outlookApplication.Dispose();
             }
-            applicationObject = null;
+            catch (Exception ex)
+            {
+                string message = string.Format("An error occured.{0}{0}{1}", Environment.NewLine, ex.Message);
+                MessageBox.Show(message, "OPENERP-OnDisconetion", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         /// <summary>
@@ -128,12 +144,12 @@ namespace OpenERPOutlookPlugin
         /// </param>
         /// <seealso class='IDTExtensibility2' />
         /// 
-        private office.CommandBarButton btn_open_partner;
-        private office.CommandBarButton btn_open_document;
-        private office.CommandBarButton btn_open_configuration_form;
-        private office.CommandBars oCommandBars;
-        private office.CommandBar menuBar;
-        private office.CommandBarPopup newMenuBar;
+        private Office.CommandBarButton btn_open_partner;
+        private Office.CommandBarButton btn_open_document;
+        private Office.CommandBarButton btn_open_configuration_form;
+        //private Office.CommandBars oCommandBars;
+        private Office.CommandBar menuBar;
+        private Office.CommandBarPopup newMenuBar;
 
         public int countMail()
         {
@@ -144,29 +160,35 @@ namespace OpenERPOutlookPlugin
              
              */
             cnt_mail = 0;
-            Microsoft.Office.Interop.Outlook.Application app = null;
+            Outlook.Application app = _outlookApplication;
 
-            app = new Microsoft.Office.Interop.Outlook.Application();
-            foreach (var selection in app.ActiveExplorer().Selection)
+            //app = new Microsoft.Office.Interop.Outlook.Application();
+
+            try
             {
                 cnt_mail = app.ActiveExplorer().Selection.Count;
             }
-
+            catch (Exception)
+            {
+                return 0;
+            }
             return cnt_mail;
         }
       
         public void OnStartupComplete(ref System.Array custom)
         {
-            /*
+           
+            //-----------------------------------------------------------------------------------------------------------------------------------------------------
+           /* /*
              
              * When outlook is opened it loads a Menu if Outlook plugin is installed.
              * OpenERP - > Push, Partner ,Documents, Configuration
              
-             */
-            Microsoft.Office.Interop.Outlook.Application app = null;
+             #1#
+         */
+            Outlook.Application app = _outlookApplication;
             try
             {
-                app = new Microsoft.Office.Interop.Outlook.Application();
                 object omissing = System.Reflection.Missing.Value;
                 menuBar = app.ActiveExplorer().CommandBars.ActiveMenuBar;
                 ConfigManager config = new ConfigManager();
@@ -183,52 +205,52 @@ namespace OpenERPOutlookPlugin
                 }
                 catch(Exception )
                 {
-                    MessageBox.Show("Unable to connect remote Server ' " + openerp_connect.URL + " '.", "OpenERP Connection",MessageBoxButtons.OK,MessageBoxIcon.Exclamation);
+                    //just shallow exception
                 }
-                newMenuBar = (office.CommandBarPopup)menuBar.Controls.Add(office.MsoControlType.msoControlPopup, omissing, omissing, omissing, true);
+                newMenuBar = (Office.CommandBarPopup)menuBar.Controls.Add(MsoControlType.msoControlPopup, omissing, omissing, omissing, true);
                 if (newMenuBar != null)
                 {
                     newMenuBar.Caption = "OpenERP";
                     newMenuBar.Tag = "My";
 
-                    btn_open_partner = (office.CommandBarButton)newMenuBar.Controls.Add(office.MsoControlType.msoControlButton, omissing, omissing, 1, true);
-                    btn_open_partner.Style = office.MsoButtonStyle.msoButtonIconAndCaption;
+                    btn_open_partner = (Office.CommandBarButton)newMenuBar.Controls.Add(MsoControlType.msoControlButton, omissing, omissing, 1, true);
+                    btn_open_partner.Style = MsoButtonStyle.msoButtonIconAndCaption;
                     btn_open_partner.Caption = "Contact";
                     //Face ID will use to show the ICON in the left side of the menu.
                     btn_open_partner.FaceId = 3710;
                     newMenuBar.Visible = true;
-                    btn_open_partner.Click += new Microsoft.Office.Core._CommandBarButtonEvents_ClickEventHandler(this.btn_open_partner_Click);
+                    btn_open_partner.ClickEvent += new Office.CommandBarButton_ClickEventHandler(this.btn_open_partner_Click); //Core._CommandBarButtonEvents_ClickEventHandler(this.btn_open_partner_Click);
 
-                    btn_open_document = (office.CommandBarButton)newMenuBar.Controls.Add(office.MsoControlType.msoControlButton, omissing, omissing, 2, true);
-                    btn_open_document.Style = office.MsoButtonStyle.msoButtonIconAndCaption;
+                    btn_open_document = (Office.CommandBarButton)newMenuBar.Controls.Add(MsoControlType.msoControlButton, omissing, omissing, 2, true);
+                    btn_open_document.Style = MsoButtonStyle.msoButtonIconAndCaption;
                     btn_open_document.Caption = "Documents";
                     //Face ID will use to show the ICON in the left side of the menu.
                     btn_open_document.FaceId = 258;
                     newMenuBar.Visible = true;
-                    btn_open_document.Click += new Microsoft.Office.Core._CommandBarButtonEvents_ClickEventHandler(this.btn_open_document_Click);
+                    btn_open_document.ClickEvent += new Office.CommandBarButton_ClickEventHandler(this.btn_open_document_Click);
 
-                    btn_open_configuration_form = (office.CommandBarButton)newMenuBar.Controls.Add(office.MsoControlType.msoControlButton, omissing, omissing, 3, true);
-                    btn_open_configuration_form.Style = office.MsoButtonStyle.msoButtonIconAndCaption;
+                    btn_open_configuration_form = (Office.CommandBarButton)newMenuBar.Controls.Add(MsoControlType.msoControlButton, omissing, omissing, 3, true);
+                    btn_open_configuration_form.Style = MsoButtonStyle.msoButtonIconAndCaption;
                     btn_open_configuration_form.Caption = "Configuration";
                     //Face ID will use to show the ICON in the left side of the menu.
                     btn_open_configuration_form.FaceId = 5644;
                     newMenuBar.Visible = true;
-                    btn_open_configuration_form.Click += new Microsoft.Office.Core._CommandBarButtonEvents_ClickEventHandler(this.btn_open_configuration_form_Click);
+                    btn_open_configuration_form.ClickEvent += new Office.CommandBarButton_ClickEventHandler(this.btn_open_configuration_form_Click);
 
                 }
 
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                object oActiveExplorer;
-                oActiveExplorer = applicationObject.GetType().InvokeMember("ActiveExplorer", BindingFlags.GetProperty, null, applicationObject, null);
-                oCommandBars = (office.CommandBars)oActiveExplorer.GetType().InvokeMember("CommandBars", BindingFlags.GetProperty, null, oActiveExplorer, null);
+                string message = string.Format("An error occured.{0}{0}{1}", Environment.NewLine, ex.Message);
+                MessageBox.Show(message, "OPENERP-Initialize menu", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
                  
 
         }
+        #endregion
 
-        void btn_open_configuration_form_Click(Microsoft.Office.Core.CommandBarButton Ctrl, ref bool CancelDefault)
+        void btn_open_configuration_form_Click(Office.CommandBarButton Ctrl, ref bool CancelDefault)
         {
             frm_openerp_configuration frm_config = new frm_openerp_configuration();
             frm_config.Show();
@@ -248,7 +270,6 @@ namespace OpenERPOutlookPlugin
             if (Cache.OpenERPOutlookPlugin == null || Cache.OpenERPOutlookPlugin.isLoggedIn == false)
             {
                 throw new Exception("OpenERP Server is not connected!\nPlease connect OpenERP Server from Configuration Menu.");
-
             }
             return true;
         }
@@ -292,16 +313,15 @@ namespace OpenERPOutlookPlugin
 
         }
        
-        void btn_open_partner_Click(Microsoft.Office.Core.CommandBarButton Ctrl, ref bool CancelDefault)
+        void btn_open_partner_Click(Office.CommandBarButton Ctrl, ref bool CancelDefault)
         {
             try
             {
                 Connect.isLoggedIn();
-                this.CheckMailCount(); 
+                this.CheckMailCount();
                 if (countMail() == 1)
                 {
-
-                    foreach (outlook.MailItem mailitem in Tools.MailItems())
+                    foreach (Outlook.MailItem mailitem in Tools.MailItems())
                     {
                         
 
@@ -327,12 +347,14 @@ namespace OpenERPOutlookPlugin
 
         }
 
-        void btn_open_document_Click(Microsoft.Office.Core.CommandBarButton Ctrl, ref bool CancelDefault)
+        void btn_open_document_Click(Office.CommandBarButton Ctrl, ref bool CancelDefault)
         {
             try
             {
                 Connect.isLoggedIn();
-                this.CheckMailCount(); 
+
+                this.CheckMailCount();
+                
                 if (countMail() == 1)
                 {
                     frm_choose_document_opt frm_doc = new frm_choose_document_opt();    
@@ -349,7 +371,61 @@ namespace OpenERPOutlookPlugin
         public void OnBeginShutdown(ref System.Array custom)
         {
         }
-        private object applicationObject;
-        private object addInInstance;
+
+        //this available for debug purposes
+        #region COM Register Functions
+
+        [ComRegisterFunctionAttribute]
+        public static void RegisterFunction(Type type)
+        {
+            try
+            {
+                // add codebase value
+                Assembly thisAssembly = Assembly.GetAssembly(typeof(Connect));
+                RegistryKey key = Registry.ClassesRoot.CreateSubKey("CLSID\\{" + type.GUID.ToString().ToUpper() + "}\\InprocServer32\\1.0.0.0");
+                key.SetValue("CodeBase", thisAssembly.CodeBase);
+                key.Close();
+
+                Registry.ClassesRoot.CreateSubKey(@"CLSID\{" + type.GUID.ToString().ToUpper() + @"}\Programmable");
+
+                // add bypass key
+                // http://support.microsoft.com/kb/948461
+                key = Registry.ClassesRoot.CreateSubKey("Interface\\{000C0601-0000-0000-C000-000000000046}");
+                string defaultValue = key.GetValue("") as string;
+                if (null == defaultValue)
+                    key.SetValue("", "Office .NET Framework Lockback Bypass Key");
+                key.Close();
+
+                // add outlook addin key
+                Registry.CurrentUser.CreateSubKey(_addinOfficeRegistryKey + _prodId);
+                RegistryKey rk = Registry.CurrentUser.OpenSubKey(_addinOfficeRegistryKey + _prodId, true);
+                rk.SetValue("LoadBehavior", Convert.ToInt32(3));
+                rk.SetValue("FriendlyName", _addinFriendlyName);
+                rk.SetValue("Description", _addinDescription);
+                rk.Close();
+            }
+            catch (Exception ex)
+            {
+                string details = string.Format("{1}{1}Details:{1}{1}{0}", ex.Message, Environment.NewLine);
+                MessageBox.Show("An error occured." + details, "Register " + _prodId, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        [ComUnregisterFunctionAttribute]
+        public static void UnregisterFunction(Type type)
+        {
+            try
+            {
+                Registry.ClassesRoot.DeleteSubKey(@"CLSID\{" + type.GUID.ToString().ToUpper() + @"}\Programmable", false);
+                Registry.CurrentUser.DeleteSubKey(_addinOfficeRegistryKey + _prodId, false);
+            }
+            catch (Exception throwedException)
+            {
+                string details = string.Format("{1}{1}Details:{1}{1}{0}", throwedException.Message, Environment.NewLine);
+                MessageBox.Show("An error occured." + details, "Unregister " + _prodId, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        #endregion
     }
 }

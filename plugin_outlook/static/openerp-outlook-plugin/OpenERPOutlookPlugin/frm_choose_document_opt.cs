@@ -26,7 +26,7 @@ using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using OpenERPClient;
-using outlook = Microsoft.Office.Interop.Outlook;
+using outlook = NetOffice.OutlookApi;
 using System.Collections;
 
 namespace OpenERPOutlookPlugin
@@ -94,5 +94,14 @@ namespace OpenERPOutlookPlugin
             this.Close();
         }
 
+        private void BtnDocOnClick(object sender, EventArgs e)
+        {
+                foreach (NetOffice.OutlookApi.MailItem mailitem in Tools.MailItems())
+                {
+                    Cache.OpenERPOutlookPlugin.Open_Document(mailitem);
+               
+                }
+                this.Close();
+        }
     }
 }
